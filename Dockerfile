@@ -16,7 +16,7 @@ RUN curl -fsSL "https://tmi-artifacts.floot.app/_cdn/static/04a20022-9c67-4e6c-8
     && curl -fsSL "https://tmi-artifacts.floot.app/_cdn/static/75ce2ec7-5457-4f1f-8cd7-baa2d6248279-tmi_overlay_private_batch_v3.zip" -o /tmp/tmi-overlay.zip \
     && unzip -qo /tmp/tmi-overlay.zip -d /tmp/tmi-overlay \
     && cp -a /tmp/tmi-overlay/. /app/ \
-    && rm -rf /tmp/tmi-base /tmp/tmi-base.zip /tmp/tmi-overlay /tmp/tmi-overlay.zip
+    && rm -rf /tmp/tmi-base /tmp/tmi-base.zip /tmp/tmi-overlay /tmp/tmi-overlay.zip /tmp/tmi-patch /tmp/tmi-patch.zip
 
 WORKDIR /app/backend
 RUN pip install --no-cache-dir --upgrade pip \

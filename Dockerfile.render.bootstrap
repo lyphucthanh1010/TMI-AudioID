@@ -1,0 +1,38 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg libchromaprint1 xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY bootstrap /app/bootstrap
+RUN chmod +x /app/bootstrap/unpack.sh \
+    && /app/bootstrap/unpack.sh /app
+
+WORKDIR /app/backend
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir "." "psycopg[binary]>=3.2" \
+    && mkdir -p /app/pretrained_runtime/models \
+    && cp /app/backend/runtime/audioid.db /app/pretrained_runtime/audioid.db \
+    && python /app/backend/scripts/build_pretrained_model.py \
+       --db /app/pretrained_runtime/audioid.db \
+       --artifact-dir /app/pretrained_runtime/models \
+    && chmod +x /app/backend/scripts/start_render.sh \
+    && useradd --create-home --uid 10001 audioid \
+    && mkdir -p /runtime \
+    && chown -R audioid:audioid /runtime /app
+
+USER audioid
+
+ENV AUDIOID_RUNTIME_DIR=/runtime \
+    AUDIOID_DATABASE_URL=sqlite+pysqlite:////runtime/audioid.db \
+    AUDIOID_ARTIFACT_DIR=/runtime/models \
+    AUDIOID_UPLOAD_DIR=/runtime/uploads \
+    AUDIOID_AUTO_CREATE_SCHEMA=1
+
+EXPOSE 10000
+
+CMD ["/app/backend/scripts/start_render.sh"]

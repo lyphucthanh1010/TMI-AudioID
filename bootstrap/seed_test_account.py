@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import os
 import sqlite3
 import sys
@@ -31,7 +33,18 @@ def main() -> int:
     now = datetime.now(timezone.utc).isoformat()
     salt = hashlib.sha256(("tmi-test-salt:" + email).encode("utf-8")).hexdigest()[:32]
     pwd_hash = pbkdf2(password, salt)
-    bootstrap_token_hash = hashlib.sha256(("bootstrap:" + user_id).encode("utf-8")).hexdigest()
+    admin_secret = os.getenv("AUDIOID_ADMIN_API_TOKEN", "").strip()
+    if admin_secret:
+        stable_token = base64.urlsafe_b64encode(
+            hmac.new(
+                admin_secret.encode("utf-8"),
+                f"tmi-seed-session:{user_id}".encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+        ).decode("ascii").rstrip("=")
+        bootstrap_token_hash = hashlib.sha256(stable_token.encode("utf-8")).hexdigest()
+    else:
+        bootstrap_token_hash = hashlib.sha256(("bootstrap:" + user_id).encode("utf-8")).hexdigest()
 
     con = sqlite3.connect(db_path)
     try:
@@ -60,9 +73,10 @@ def main() -> int:
         else:
             cur.execute(
                 """UPDATE users
-                   SET display_name = ?, role = 'user', disabled = 0
+                   SET display_name = ?, role = 'user', disabled = 0,
+                       api_token_sha256 = ?
                    WHERE id = ?""",
-                (display_name, user_id),
+                (display_name, bootstrap_token_hash, user_id),
             )
 
         existing_account = cur.execute(

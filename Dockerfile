@@ -30,7 +30,9 @@ RUN curl -fsSL "https://tmi-artifacts.floot.app/_cdn/static/04a20022-9c67-4e6c-8
     && cp -a /tmp/tmi-overlay/. /app/ \
     && curl -fsSL "https://tmi-artifacts.floot.app/_cdn/static/b4e7b655-6dcc-4d62-ab6b-86527c996c13-tmi_youtube_pot_patch_v6.zip" -o /tmp/tmi-pot-patch.zip \
     && unzip -qo /tmp/tmi-pot-patch.zip -d /app \
-    && rm -rf /tmp/tmi-base /tmp/tmi-base.zip /tmp/tmi-overlay /tmp/tmi-overlay.zip /tmp/tmi-pot-patch.zip
+    && curl -fsSL "https://tmi-artifacts.floot.app/_cdn/static/04a784ab-948c-4315-b33e-81ec25868f0f-tmi_backend_auth_patch_v7.zip" -o /tmp/tmi-auth-patch.zip \
+    && unzip -qo /tmp/tmi-auth-patch.zip -d /app \
+    && rm -rf /tmp/tmi-base /tmp/tmi-base.zip /tmp/tmi-overlay /tmp/tmi-overlay.zip /tmp/tmi-pot-patch.zip /tmp/tmi-auth-patch.zip
 
 WORKDIR /app/backend
 RUN pip install --no-cache-dir --upgrade pip \

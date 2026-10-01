@@ -23,7 +23,7 @@ services:
       curl -fsSL https://tmi-artifacts.floot.app/_cdn/static/04a20022-9c67-4e6c-8ecb-10df44b8b6fc-tmi_render_base.zip -o /tmp/tmi-base.zip &&
       unzip -q /tmp/tmi-base.zip -d /tmp/tmi-base &&
       cp -a /tmp/tmi-base/tmi_render_ready/. . &&
-      curl -fsSL https://tmi-artifacts.floot.app/_cdn/static/5383c5fa-4d0d-4852-ae52-d80f1435fe8c-tmi_overlay_complete_v2.zip -o /tmp/tmi-overlay.zip &&
+      curl -fsSL https://tmi-artifacts.floot.app/_cdn/static/75ce2ec7-5457-4f1f-8cd7-baa2d6248279-tmi_overlay_private_batch_v3.zip -o /tmp/tmi-overlay.zip &&
       unzip -qo /tmp/tmi-overlay.zip -d /tmp/tmi-overlay &&
       cp -a /tmp/tmi-overlay/. . &&
       cd frontend &&

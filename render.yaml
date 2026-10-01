@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: tmi-audioid-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile.render.bootstrap
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: AUDIOID_ADMIN_API_TOKEN
+        generateValue: true
+      - key: AUDIOID_CORS_ORIGINS
+        value: https://tmi-music.onrender.com
+      - key: AUDIOID_MAX_UPLOAD_MB
+        value: "100"
+
+  - type: web
+    name: tmi-music
+    runtime: static
+    buildCommand: chmod +x bootstrap/unpack.sh && ./bootstrap/unpack.sh . && cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://tmi-audioid-api.onrender.com
+      - key: VITE_PUBLIC_BASE_URL
+        value: https://tmi-music.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

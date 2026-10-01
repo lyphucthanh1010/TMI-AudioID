@@ -8,6 +8,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY bootstrap/seed_test_account.py /app/bootstrap/seed_test_account.py
+COPY bootstrap/start_render_seeded.sh /app/bootstrap/start_render_seeded.sh
 RUN curl -fsSL "https://tmi-artifacts.floot.app/_cdn/static/04a20022-9c67-4e6c-8ecb-10df44b8b6fc-tmi_render_base.zip" -o /tmp/tmi-base.zip \
     && unzip -q /tmp/tmi-base.zip -d /tmp/tmi-base \
     && cp -a /tmp/tmi-base/tmi_render_ready/. /app/ \
@@ -21,7 +23,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir "." "psycopg[binary]>=3.2" \
     && mkdir -p /app/pretrained_runtime \
     && cp -a /app/backend/runtime/. /app/pretrained_runtime/ \
-    && chmod +x /app/backend/scripts/start_render.sh \
+    && chmod +x /app/backend/scripts/start_render.sh /app/bootstrap/start_render_seeded.sh \
     && useradd --create-home --uid 10001 audioid \
     && mkdir -p /runtime \
     && chown -R audioid:audioid /runtime /app
@@ -36,4 +38,4 @@ ENV AUDIOID_RUNTIME_DIR=/runtime \
 
 EXPOSE 10000
 
-CMD ["/app/backend/scripts/start_render.sh"]
+CMD ["/app/bootstrap/start_render_seeded.sh"]

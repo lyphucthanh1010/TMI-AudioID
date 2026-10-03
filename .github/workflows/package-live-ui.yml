@@ -1,0 +1,25 @@
+name: Package Live UI Evidence
+on:
+  push:
+    paths:
+      - "package-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode live screenshots
+        run: |
+          mkdir -p /tmp/live-ui
+          for f in evidence/live-ui/*.png.b64; do
+            name=$(basename "$f" .b64)
+            base64 -d "$f" > "/tmp/live-ui/$name"
+          done
+          cd /tmp && zip -r TMI_live_production_UI.zip live-ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TMI-live-production-UI
+          path: /tmp/TMI_live_production_UI.zip
+          if-no-files-found: error

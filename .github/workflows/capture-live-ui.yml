@@ -1,0 +1,37 @@
+name: Capture Live TMI UI
+on:
+  push:
+    paths:
+      - "capture-trigger.txt"
+permissions:
+  contents: write
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser automation
+        run: |
+          npm init -y
+          npm install playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Generate deterministic audio fixture
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -y -f lavfi -i "sine=frequency=440:duration=20" -f lavfi -i "sine=frequency=554.37:duration=20" -f lavfi -i "sine=frequency=659.25:duration=20" -filter_complex "[0:a]volume=0.45[a0];[1:a]volume=0.30[a1];[2:a]volume=0.25[a2];[a0][a1][a2]amix=inputs=3,volume=0.8" -ar 44100 -ac 1 /tmp/tmi_capture.wav
+      - name: Capture production UI
+        run: node tools/capture-live-ui.mjs
+      - name: Encode screenshots for retrieval
+        run: |
+          for f in evidence/live-ui/*.png; do base64 -w0 "$f" > "$f.b64"; done
+      - name: Commit evidence
+        run: |
+          git config user.name "TMI Evidence Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add evidence/live-ui/*.b64
+          git commit -m "docs: capture live production UI evidence" || exit 0
+          git push

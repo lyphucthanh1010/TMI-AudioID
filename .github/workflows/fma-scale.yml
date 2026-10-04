@@ -1,0 +1,167 @@
+name: FMA Small Scale Experiment
+on:
+  push:
+    paths:
+      - "experiments/fma_scale/trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    name: Extract shard ${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libchromaprint1
+          python -m pip install -q --upgrade pip
+          pip install -q numpy remotezip requests
+      - name: Extract real FMA audio fingerprints
+        run: |
+          python experiments/fma_scale/extract_features.py             --shard ${{ matrix.shard }} --num-shards 8 --workers 2             --out shard_${{ matrix.shard }}.npz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fma-shard-${{ matrix.shard }}
+          path: |
+            shard_${{ matrix.shard }}.npz
+            shard_${{ matrix.shard }}.errors.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  merge:
+    needs: extract
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q numpy
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fma-shard-*
+          path: shards
+          merge-multiple: true
+      - name: Merge shards
+        run: python experiments/fma_scale/merge_features.py --glob "shards/shard_*.npz" --out fma_small_audioid_features.npz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fma-small-features
+          path: fma_small_audioid_features.npz
+          retention-days: 7
+
+  train_main:
+    needs: merge
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [100,500,1000,2000,4000,8000]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q numpy scipy scikit-learn psutil
+      - uses: actions/download-artifact@v4
+        with:
+          name: fma-small-features
+          path: data
+      - name: Train production RF 100 trees
+        shell: bash
+        run: |
+          set +e
+          ulimit -v 14500000
+          python experiments/fma_scale/train_scale.py             --data data/fma_small_audioid_features.npz             --n ${{ matrix.n }} --trees 100 --out result_${{ matrix.n }}_100.json
+          code=$?
+          if [ ! -f result_${{ matrix.n }}_100.json ]; then
+            printf '{"requested_tracks":%s,"trees":100,"status":"process_failed","exit_code":%s}\n' "${{ matrix.n }}" "$code" > result_${{ matrix.n }}_100.json
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: result-main-${{ matrix.n }}
+          path: |
+            result_${{ matrix.n }}_100.json
+            result_${{ matrix.n }}_100.ranks.npy
+          if-no-files-found: warn
+          retention-days: 7
+
+  train_stress:
+    needs: merge
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1000,2000,4000,8000]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q numpy scipy scikit-learn psutil
+      - uses: actions/download-artifact@v4
+        with:
+          name: fma-small-features
+          path: data
+      - name: Train reduced-tree stress line 10 trees
+        shell: bash
+        run: |
+          set +e
+          ulimit -v 14500000
+          python experiments/fma_scale/train_scale.py             --data data/fma_small_audioid_features.npz             --n ${{ matrix.n }} --trees 10 --out result_${{ matrix.n }}_10.json
+          code=$?
+          if [ ! -f result_${{ matrix.n }}_10.json ]; then
+            printf '{"requested_tracks":%s,"trees":10,"status":"process_failed","exit_code":%s}\n' "${{ matrix.n }}" "$code" > result_${{ matrix.n }}_10.json
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: result-stress-${{ matrix.n }}
+          path: |
+            result_${{ matrix.n }}_10.json
+            result_${{ matrix.n }}_10.ranks.npy
+          if-no-files-found: warn
+          retention-days: 7
+
+  summarize:
+    needs: [train_main, train_stress]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: results
+      - name: Build summary
+        run: python experiments/fma_scale/summarize.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fma-scale-final-results
+          path: summary
+          retention-days: 30

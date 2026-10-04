@@ -1,0 +1,85 @@
+name: FMA Small Scale Experiment
+on:
+  push:
+    paths:
+      - "experiments/fma-trigger.txt"
+permissions:
+  contents: read
+jobs:
+  fma-scale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: System dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg libchromaprint1
+          python -m pip install --upgrade pip
+          pip install numpy==2.1.3 scikit-learn==1.5.2
+      - name: Download FMA-small
+        run: |
+          df -h
+          curl -L --fail --retry 5 --retry-delay 10 --progress-bar \
+            -o /tmp/fma_small.zip https://os.unil.cloud.switch.ch/fma/fma_small.zip
+          echo "ade154f733639d52e35e32f5593efe5be76c6d70  /tmp/fma_small.zip" | sha1sum -c -
+          ls -lh /tmp/fma_small.zip
+          df -h
+      - name: Extract Chromaprint features from all 8000 tracks
+        run: |
+          mkdir -p evidence/fma-small-scale
+          python experiments/fma_scale_extract.py --zip /tmp/fma_small.zip --out evidence/fma-small-scale --limit 8000
+      - name: Run RF catalog scales
+        shell: bash
+        run: |
+          set +e
+          mkdir -p evidence/fma-small-scale/scales
+          : > evidence/fma-small-scale/scale_status.tsv
+          for N in 1000 2000 5000 8000; do
+            echo "=== SCALE $N ==="
+            (
+              ulimit -v 6500000
+              timeout 3600 python experiments/fma_scale_train.py \
+                --features evidence/fma-small-scale/fma_small_chromaprint64.npz \
+                --scale "$N" \
+                --out "evidence/fma-small-scale/scales/scale_${N}.json"
+            )
+            CODE=$?
+            if [ "$CODE" -eq 0 ]; then
+              echo -e "$N\tok" >> evidence/fma-small-scale/scale_status.tsv
+            else
+              echo -e "$N\tfailed_exit_$CODE" >> evidence/fma-small-scale/scale_status.tsv
+              cat > "evidence/fma-small-scale/scales/scale_${N}_failure.json" <<EOF
+{"scale_tracks":$N,"status":"failed","exit_code":$CODE}
+EOF
+            fi
+          done
+          cat evidence/fma-small-scale/scale_status.tsv
+          exit 0
+      - name: Build consolidated summary
+        run: |
+          python - <<'PY'
+          import json,csv,glob
+          from pathlib import Path
+          root=Path("evidence/fma-small-scale")
+          rows=[]
+          for f in sorted((root/"scales").glob("scale_*.json")):
+              if "_failure" in f.name: continue
+              try: rows.append(json.loads(f.read_text()))
+              except: pass
+          with (root/"fma_scale_summary.csv").open("w",newline="") as h:
+              fields=["scale_tracks","train_samples","query_count","trees","recall_at_1","recall_at_3","recall_at_5","recall_at_10","fit_s","query_p50_ms","query_p95_ms","peak_rss_mb","tree_arrays_mb","status"]
+              w=csv.DictWriter(h,fieldnames=fields,extrasaction="ignore"); w.writeheader(); w.writerows(rows)
+          print((root/"fma_scale_summary.csv").read_text())
+          PY
+      - name: Upload FMA experiment results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TMI-FMA-small-scale-results
+          path: |
+            evidence/fma-small-scale/**
+          retention-days: 90

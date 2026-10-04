@@ -52,9 +52,7 @@ jobs:
               echo -e "$N\tok" >> evidence/fma-small-scale/scale_status.tsv
             else
               echo -e "$N\tfailed_exit_$CODE" >> evidence/fma-small-scale/scale_status.tsv
-              cat > "evidence/fma-small-scale/scales/scale_${N}_failure.json" <<EOF
-{"scale_tracks":$N,"status":"failed","exit_code":$CODE}
-EOF
+              printf '{"scale_tracks":%s,"status":"failed","exit_code":%s}\n' "$N" "$CODE" > "evidence/fma-small-scale/scales/scale_${N}_failure.json"
             fi
           done
           cat evidence/fma-small-scale/scale_status.tsv
